@@ -2,7 +2,7 @@ import time
 import copy
 import json
 import panoply
-import urillib2
+import urllib2
 import dateparser
 
 
@@ -28,8 +28,8 @@ class Typeform(panoply.DataSource):
         self._incval = None
         if (source.get('inckey')):
             incval = source.get('incval')
-            self._incval = incval if incval else
-                source.get('lastTimeSucceed') or source.get('lastRuntime')
+            self._incval = (incval if incval else
+                source.get('lastTimeSucceed') or source.get('lastRuntime'))
 
             # validate that's the incremental value is a valid
             # date that could be parsed to a Unix timestamp before
@@ -61,7 +61,7 @@ class Typeform(panoply.DataSource):
             BASE_URL,
             form['id'],
             self._key,
-            form['offset']
+            form['offset'],
             FETCH_LIMIT
         )
 
@@ -123,7 +123,7 @@ class Typeform(panoply.DataSource):
         return self._request(url)
 
     # Helper function for issuing GET requests 
-    def _request(self, url)
+    def _request(self, url):
         self.log('GET', url)
 
         try:
