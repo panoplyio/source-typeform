@@ -82,7 +82,7 @@ class Typeform(panoply.DataSource):
             self._forms.pop(0)
 
             # report progress
-            loaded = self._total - self._forms
+            loaded = self._total - len(self._forms)
             msg = '%s of %s forms fetched' % (loaded, self._total)
             self.progress(loaded, self._total, msg)
         else:

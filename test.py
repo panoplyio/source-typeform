@@ -12,11 +12,11 @@ OPTIONS = {
 }
 
 class TestTypeform(unittest.TestCase):
-    # before each test
+
     def setUp(self):
         self.original_urlopen = urllib2.urlopen
 
-    # after each test
+    # clean up mocks after each test
     def tearDown(self):
         urllib2.urlopen = self.original_urlopen
 
@@ -26,6 +26,26 @@ class TestTypeform(unittest.TestCase):
         self.assertEqual(source['destination'],
             DESTINATION + DESTINATION_POSTFIX
         )
+
+    def test_iterate_forms(self):
+        source = {
+            'key': 'TypefromAPIKey',
+            'forms': [
+                {'id': 'abc', 'name': 'Test Survey'},
+                {'id': 'edf', 'name': 'Test Survey'}
+            ]
+        }
+
+        res1, res2 = generateFormResults(1), generateFormResults(1)
+        urllib2.urlopen = MagicMock(side_effect=[res1, res2])
+
+        stream = Typeform(source, OPTIONS)
+        stream.read()
+        stream.read()
+        self.assertEqual(urllib2.urlopen.call_count, 2)
+
+        # we're done, it should return None
+        self.assertTrue(stream.read() is None)
 
     def test_http_error_msg(self):
         source = {
@@ -66,6 +86,18 @@ class TestTypeform(unittest.TestCase):
             stream.read()
         except TypeformError, e:
             self.assertEqual(str(e), 'HTTP StatusCode ' + str(code))
+
+def generateFormResults(size):
+    results = [{'id': x} for x in range(0,size)]
+    return BytesIO(json.dumps({
+        'stats': {
+            'responses': {
+                'showing': size
+            }
+        },
+        'questions': results,
+        'responses': results
+    }))
 
 
 if __name__ == '__main__':
