@@ -127,8 +127,8 @@ class Typeform(panoply.DataSource):
         self.log('GET', url)
 
         try:
-            res = urillib2.urlopen(url)
-        except urillib2.HTTPError, e:
+            res = urllib2.urlopen(url)
+        except urllib2.HTTPError, e:
             raise TypeformError.from_http_error(e)
 
         self.log('RESPONSE', url)
@@ -168,7 +168,8 @@ class TypeformError(Exception):
             if 'message' in parsed:
                 return cls(parsed['message'])
             elif 'status' in parsed:
-                return cls('HTTP StatusCode' + parsed['status'])
+                msg = 'HTTP StatusCode %s' % (parsed['status'])
+                return cls(msg)
         except Exception, e:
             # unable to read a structured error message nor status hint,
             # just return the original error
