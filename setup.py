@@ -9,7 +9,9 @@ setup(
     url="http://panoply.io",
     package_dir={"panoply": ""},
     install_requires=[
-        "panoply-python-sdk"
+        "panoply-python-sdk",
+        "mock==1.0.1",
+        "dateparser==0.5.0"
     ],
     packages=["panoply.typeform"]
 )
