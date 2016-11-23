@@ -15,10 +15,12 @@ class TestTypeform(unittest.TestCase):
 
     def setUp(self):
         self.original_urlopen = urllib2.urlopen
+        self.original_fetch_limit = typeform.FETCH_LIMIT
 
     # clean up mocks after each test
     def tearDown(self):
         urllib2.urlopen = self.original_urlopen
+        typeform.FETCH_LIMIT = self.original_fetch_limit
 
     def test_destination(self):
         source = {'key': 'TypeformAPIKey'}
@@ -51,6 +53,33 @@ class TestTypeform(unittest.TestCase):
 
         expected = 'Test Survey_responses'
         self.assertEqual(results[1].get('__table'), expected)
+
+    def test_pagination(self):
+        source = {
+            'key': 'TypeformAPIKey',
+            'forms': [{'id': 'abc', 'name': 'Test Survey'}]
+        }
+
+        limit = typeform.FETCH_LIMIT = 1
+        res1, res2 = generateFormResults(1, None, 2), generateFormResults(1)
+        urllib2.urlopen = MagicMock(side_effect=[res1, res2])
+
+        stream = Typeform(source, OPTIONS)
+        stream.read() # 1st page
+        stream.read() # 2nd page
+        self.assertIsNone(stream.read()) # we're done
+
+        # it should make 2 requests.
+        self.assertEqual(urllib2.urlopen.call_count, 2)
+
+        # test that it constructed the correct url
+        url = '%s/form/%s?key=%s&completed=true&offset=1&limit=%s' % (
+            BASE_URL,
+            source['forms'][0].get('id'),
+            source['key'],
+            limit
+        )
+        urllib2.urlopen.assert_called_with(url)
 
     def test_iterate_forms(self):
         source = {
@@ -112,7 +141,7 @@ class TestTypeform(unittest.TestCase):
         except TypeformError, e:
             self.assertEqual(str(e), 'HTTP StatusCode ' + str(code))
 
-def generateFormResults(size, responses = None):
+def generateFormResults(size, responses = None, total = None):
     indexes = range(0, size)
 
     # generate objects if no responses are given.
@@ -123,7 +152,7 @@ def generateFormResults(size, responses = None):
     return BytesIO(json.dumps({
         'stats': {
             'responses': {
-                'showing': size
+                'completed': total or size
             }
         },
         'questions': results,
