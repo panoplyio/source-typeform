@@ -54,6 +54,33 @@ class TestTypeform(unittest.TestCase):
         expected = 'Test Survey_responses'
         self.assertEqual(results[1].get('__table'), expected)
 
+    def test_incremental(self):
+        source = {
+            'key': 'TypeformAPIKey',
+            'inckey': 'since',
+            'incval': '2016-09-21T10:23:42.819Z',
+            'forms': [{'id': 'abc', 'name': 'Test Survey'}]
+        }
+
+        res = generateFormResults(1)
+        urllib2.urlopen = MagicMock(return_value=res)
+
+        stream = Typeform(source, OPTIONS)
+        stream.read()
+
+        time = source.get('incval')
+        time = typeform.getTimestamp(time)
+        # the focus here is on the 'since' query param that indicates
+        # we're pulling data after a specific date
+        url = '%s/form/%s?key=%s&completed=true&offset=0&limit=%s&since=%s' % (
+            BASE_URL,
+            source['forms'][0].get('id'),
+            source['key'],
+            FETCH_LIMIT,
+            time
+        )
+        urllib2.urlopen.assert_called_with(url)
+
     def test_pagination(self):
         source = {
             'key': 'TypeformAPIKey',

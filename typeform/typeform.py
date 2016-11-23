@@ -34,7 +34,7 @@ class Typeform(panoply.DataSource):
             # validate that's the incremental value is a valid
             # date that could be parsed to a Unix timestamp before
             # including it in the process
-            self._incval = isDate(self._incval)
+            self._incval = getTimestamp(self._incval)
 
 
         forms = source.get('forms')
@@ -141,20 +141,6 @@ class Typeform(panoply.DataSource):
         return json.loads(body)
 
 
-    @staticmethod
-    def isDate(value):
-        try:
-            # this is kind of ugly, but we need to convert a date string
-            # (e.g. '2016-09-21T10:23:42.819Z') to Unix timestamp
-            value = value.split('.')[0]
-            dt_tuple = dateparser.parse(value).timetuple()
-            return int(time.mktime(dt_tuple))
-        except Exception, e:
-            # if we can't parse the date to a timestamp (so it could
-            # be used in the url GET request), don't use it at all.
-            return None
-
-
 # Typeform API exception class
 class TypeformError(Exception):
 
@@ -181,3 +167,16 @@ class TypeformError(Exception):
         # no descriptive error message was extracted, return the
         # original generic error
         return err
+
+# Helper function to validate a date and return the Unix timestamp
+def getTimestamp(value):
+    try:
+        # this is kind of ugly, but we need to convert a date string
+        # (e.g. '2016-09-21T10:23:42.819Z') to Unix timestamp
+        value = value.split('.')[0]
+        dt_tuple = dateparser.parse(value).timetuple()
+        return int(time.mktime(dt_tuple))
+    except Exception, e:
+        # if we can't parse the date to a timestamp (so it could
+        # be used in the url GET request), don't use it at all.
+        return None
