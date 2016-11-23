@@ -27,6 +27,31 @@ class TestTypeform(unittest.TestCase):
             DESTINATION + DESTINATION_POSTFIX
         )
 
+    def test_results(self):
+        source = {
+            'key': 'TypefromAPIKey',
+            'forms': [{'id': 'abc', 'name': 'Test Survey'}]
+        }
+
+        # mock the returned responses from the server
+        responses = [{'id': 0, 'foo_choice': 'bar'}]
+        form_result = generateFormResults(1, responses)
+        urllib2.urlopen = MagicMock(return_value=form_result)
+
+        stream = Typeform(source, OPTIONS)
+
+        results = stream.read()
+        self.assertEqual(results[0].get('foo_choice'), 'bar')
+        self.assertEqual(results[1].get('foo_choice'), 'bar')
+
+        # it should have the destination table name attribute
+        # as the form's name joined with the type ('question'/'answer')
+        expected = 'Test Survey_questions'
+        self.assertEqual(results[0].get('__table'), expected)
+
+        expected = 'Test Survey_responses'
+        self.assertEqual(results[1].get('__table'), expected)
+
     def test_iterate_forms(self):
         source = {
             'key': 'TypefromAPIKey',
@@ -87,8 +112,14 @@ class TestTypeform(unittest.TestCase):
         except TypeformError, e:
             self.assertEqual(str(e), 'HTTP StatusCode ' + str(code))
 
-def generateFormResults(size):
-    results = [{'id': x} for x in range(0,size)]
+def generateFormResults(size, responses = None):
+    indexes = range(0, size)
+
+    # generate objects if no responses are given.
+    if not responses:
+        responses = [{'id': x} for x in indexes]
+
+    results = [responses[x] for x in indexes]
     return BytesIO(json.dumps({
         'stats': {
             'responses': {

@@ -106,8 +106,9 @@ class Typeform(panoply.DataSource):
 
         # add the responses (answers) records
         dest = form['name'] + '_responses'
-        results.extend(map(add_dest(dest), body['responses']))
+        responses = map(add_dest(dest), body['responses'])
 
+        results.extend(responses)
         return results
 
 
