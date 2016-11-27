@@ -10,8 +10,7 @@ setup(
     package_dir={"panoply": ""},
     install_requires=[
         "panoply-python-sdk",
-        "mock==1.0.1",
-        "dateparser==0.5.0"
+        "mock==1.0.1"
     ],
     packages=["panoply.typeform"]
 )

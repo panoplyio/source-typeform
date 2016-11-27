@@ -3,13 +3,14 @@ import copy
 import json
 import panoply
 import urllib2
-import dateparser
+import datetime
 
 
 FETCH_LIMIT = 500
 DESTINATION = 'typeform'
 DESTINATION_POSTFIX = '_{__table}'
 BASE_URL = 'https://api.typeform.com/v1'
+DATE_PARSER_FORMAT = '%Y-%m-%dT%H:%M:%S'
 
 
 class Typeform(panoply.DataSource):
@@ -174,8 +175,8 @@ def getTimestamp(value):
         # this is kind of ugly, but we need to convert a date string
         # (e.g. '2016-09-21T10:23:42.819Z') to Unix timestamp
         value = value.split('.')[0]
-        dt_tuple = dateparser.parse(value).timetuple()
-        return int(time.mktime(dt_tuple))
+        dt = datetime.datetime.strptime(value, DATE_PARSER_FORMAT)
+        return int(time.mktime(dt.timetuple()))
     except Exception, e:
         # if we can't parse the date to a timestamp (so it could
         # be used in the url GET request), don't use it at all.
