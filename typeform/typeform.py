@@ -150,7 +150,7 @@ class TypeformError(Exception):
             elif 'status' in parsed:
                 msg = 'HTTP StatusCode %s' % (parsed['status'])
                 return cls(msg)
-        except Exception, e:
+        except:
             # unable to read a structured error message nor status hint,
             # just return the original error
             pass
@@ -167,7 +167,7 @@ def getTimestamp(value):
         value = value.split('.')[0]
         dt = datetime.datetime.strptime(value, DATE_PARSER_FORMAT)
         return int(time.mktime(dt.timetuple()))
-    except Exception, e:
+    except:
         # if we can't parse the date to a timestamp (so it could
         # be used in the url GET request), don't use it at all.
         return None
