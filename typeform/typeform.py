@@ -38,8 +38,7 @@ class Typeform(panoply.DataSource):
             self._incval = getTimestamp(self._incval)
 
 
-        forms = source.get('forms')
-        forms = forms if forms else []
+        forms = source.get('forms', [])
 
         # add an 'offset' attribute used for pagination for each
         # different form, used as the actual number to use as offset
@@ -93,23 +92,16 @@ class Typeform(panoply.DataSource):
             form['offset'] += FETCH_LIMIT
 
 
-        def add_dest(dest):
-            def add(item):
-                item['__table'] = dest
-                return item
-
-            return add
-
         # clean up irrelevant attributes and add the
         # destination table name
         # 
         # add the questions records
         dest = form['name'] + '_questions'
-        results = map(add_dest(dest), body['questions'])
+        results = map(lambda x: dict(__table=dest, **x), body['questions'])
 
         # add the responses (answers) records
         dest = form['name'] + '_responses'
-        responses = map(add_dest(dest), body['responses'])
+        responses = map(lambda x: dict(__table=dest, **x), body['responses'])
 
         results.extend(responses)
         return results
