@@ -39,14 +39,12 @@ class Typeform(panoply.DataSource):
 
 
         forms = source.get('forms', [])
+        self._forms = copy.deepcopy(forms)
 
         # add an 'offset' attribute used for pagination for each
         # different form, used as the actual number to use as offset
-        self._forms = map(lambda form: {
-            'id': form['id'],
-            'name': form['name'],
-            'offset': 0
-        }, forms)
+        for f in self._forms:
+            f['offset'] = 0
 
         self._key = source.get('key')
         self._total = len(self._forms)
