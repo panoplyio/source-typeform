@@ -48,18 +48,9 @@ class Typeform(panoply.DataSource):
             return None
 
         form = self._forms[0]
-        url = '%s/form/%s?key=%s&completed=true&offset=%s&limit=%s' % (
-            BASE_URL,
-            form['id'],
-            self._key,
-            form['offset'],
-            FETCH_LIMIT
-        )
 
-        # pull data incrementally if configured to do so.
-        if self._incval:
-            url += '&since=%s' % (self._incval) 
-
+        # construct the GET url and make the request
+        url = self._url(form)
         body = self._request(url)
 
         # 'completed' represent the number of completed forms that
@@ -123,6 +114,22 @@ class Typeform(panoply.DataSource):
         # read the result and return it's parsed value
         body = res.read()
         return json.loads(body)
+
+    # construct the relevant url according to the Typeform API
+    def _url(self, form):
+        url = '%s/form/%s?key=%s&completed=true&offset=%s&limit=%s' % (
+            BASE_URL,
+            form['id'],
+            self._key,
+            form['offset'],
+            FETCH_LIMIT
+        )
+
+        # pull data incrementally if configured to do so.
+        if self._incval:
+            url += '&since=%s' % (self._incval)
+
+        return url
 
 
 # Typeform API exception class
