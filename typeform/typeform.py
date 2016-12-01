@@ -90,9 +90,10 @@ class Typeform(panoply.DataSource):
             form['offset'] += FETCH_LIMIT
 
 
-        # clean up irrelevant attributes and add the
+        # we only need the 'questions' and 'responses' results
+        # that returned from the server. On top of that, add the
         # destination table name
-        # 
+
         # add the questions records
         dest = form['name'] + '_questions'
         results = map(lambda x: dict(__table=dest, **x), body['questions'])
