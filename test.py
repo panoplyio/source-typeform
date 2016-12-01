@@ -57,8 +57,7 @@ class TestTypeform(unittest.TestCase):
     def test_incremental(self):
         source = {
             'key': 'TypeformAPIKey',
-            'inckey': 'since',
-            'incval': '2016-09-21T10:23:42.819Z',
+            'lastTimeSucceed': '2016-09-21T10:23:42.819Z',
             'forms': [{'id': 'abc', 'name': 'Test Survey'}]
         }
 
@@ -68,7 +67,7 @@ class TestTypeform(unittest.TestCase):
         stream = Typeform(source, OPTIONS)
         stream.read()
 
-        time = source.get('incval')
+        time = source.get('lastTimeSucceed')
         time = typeform.getTimestamp(time)
         # the focus here is on the 'since' query param that indicates
         # we're pulling data after a specific date

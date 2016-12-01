@@ -25,17 +25,10 @@ class Typeform(panoply.DataSource):
         # append the destination postfix, which represent the form name
         source['destination'] += DESTINATION_POSTFIX
 
-        # configure incremental pulling
-        self._incval = None
-        if (source.get('inckey')):
-            incval = source.get('incval')
-            self._incval = (incval if incval else
-                source.get('lastTimeSucceed') or source.get('lastRuntime'))
-
-            # validate that's the incremental value is a valid
-            # date that could be parsed to a Unix timestamp before
-            # including it in the process
-            self._incval = getTimestamp(self._incval)
+        # since we're retrieving only completed surveys we can
+        # allow incremental pulling from the last batch
+        incval = source.get('lastTimeSucceed') or source.get('lastRuntime')
+        self._incval = getTimestamp(incval)
 
 
         forms = source.get('forms', [])
