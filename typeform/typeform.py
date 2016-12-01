@@ -126,7 +126,6 @@ class Typeform(panoply.DataSource):
         except urllib2.HTTPError, e:
             raise TypeformError.from_http_error(e)
 
-        self.log('RESPONSE', url)
 
         # read the result and return it's parsed value
         body = res.read()
