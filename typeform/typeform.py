@@ -55,8 +55,8 @@ class Typeform(panoply.DataSource):
 
         # 'completed' represent the number of completed forms that
         # returned from the server
-        stats = body.get('stats').get('responses')
-        total = stats['completed']
+        stats = body.get('stats', {}).get('responses', {})
+        total = stats.get('completed', 0)
 
         if (form['offset'] + FETCH_LIMIT) >= total:
             # we're done paginating with the current form.
