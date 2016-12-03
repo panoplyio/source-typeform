@@ -26,8 +26,8 @@ class Typeform(panoply.DataSource):
         source['destination'] += DESTINATION_POSTFIX
 
         # since we're retrieving only completed surveys we can
-        # allow incremental pulling from the last batch
-        incval = source.get('lastTimeSucceed') or source.get('lastRuntime')
+        # allow incremental pulling from the last successful batch
+        incval = source.get('lastTimeSucceed')
         self._incval = getTimestamp(incval)
 
 
