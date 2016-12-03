@@ -48,10 +48,10 @@ class TestTypeform(unittest.TestCase):
 
         # it should have the destination table name attribute
         # as the form's name joined with the type ('question'/'answer')
-        expected = 'Test Survey_questions'
+        expected = 'Test_Survey_questions'
         self.assertEqual(results[0].get('__table'), expected)
 
-        expected = 'Test Survey_responses'
+        expected = 'Test_Survey_responses'
         self.assertEqual(results[1].get('__table'), expected)
 
     def test_incremental(self):

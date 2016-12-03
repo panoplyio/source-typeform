@@ -79,11 +79,11 @@ class Typeform(panoply.DataSource):
         # destination table name
 
         # add the questions records
-        dest = form['name'] + '_questions'
+        dest = (form['name'] + '_questions').replace(' ', '_')
         results = map(lambda x: dict(__table=dest, **x), body['questions'])
 
         # add the responses (answers) records
-        dest = form['name'] + '_responses'
+        dest = (form['name'] + '_responses').replace(' ', '_')
         responses = map(lambda x: dict(__table=dest, **x), body['responses'])
 
         results.extend(responses)
