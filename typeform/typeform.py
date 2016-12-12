@@ -99,7 +99,8 @@ class Typeform(panoply.DataSource):
         )
 
         # the body of the result is a list of forms
-        return self._request(url)
+        forms = self._request(url)
+        return map(lambda f: dict(name=f.get('name'), value=f.get('id')), forms)
 
     # Helper function for issuing GET requests 
     def _request(self, url):
@@ -119,7 +120,7 @@ class Typeform(panoply.DataSource):
     def _url(self, form):
         url = '%s/form/%s?key=%s&completed=true&offset=%s&limit=%s' % (
             BASE_URL,
-            form['id'],
+            form['value'],
             self._key,
             form['offset'],
             FETCH_LIMIT
