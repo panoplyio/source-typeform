@@ -7,8 +7,8 @@ import datetime
 
 
 FETCH_LIMIT = 500
-DESTINATION = 'typeform'
-DESTINATION_POSTFIX = '_{__table}'
+DESTINATION = 'typeform_{__table}'
+# DESTINATION_POSTFIX = '_{__table}'
 BASE_URL = 'https://api.typeform.com/v1'
 DATE_PARSER_FORMAT = '%Y-%m-%dT%H:%M:%S'
 
@@ -23,7 +23,7 @@ class Typeform(panoply.DataSource):
             source['destination'] = DESTINATION
 
         # append the destination postfix, which represent the form name
-        source['destination'] += DESTINATION_POSTFIX
+        # source['destination'] += DESTINATION_POSTFIX
 
         # since we're retrieving only completed surveys we can
         # allow incremental pulling from the last successful batch
@@ -76,7 +76,7 @@ class Typeform(panoply.DataSource):
 
         # general results statistics records
         stats = {
-            '__table': '_stats',
+            '__table': 'stats',
             '__form': form.get('name'),
             'total': stats.get('total'),
             'completed': stats.get('completed'),
@@ -105,12 +105,12 @@ class Typeform(panoply.DataSource):
             return x
 
         # questions records
-        questions = map(add_attrs('_questions', 'field_id'),
+        questions = map(add_attrs('questions', 'field_id'),
             body.get('questions')
         )
 
         # responses (survey answers) records
-        responses = map(add_attrs('_responses', 'token'),
+        responses = map(add_attrs('responses', 'token'),
             body.get('responses')
         )
 

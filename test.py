@@ -25,9 +25,7 @@ class TestTypeform(unittest.TestCase):
     def test_destination(self):
         source = {'key': 'TypeformAPIKey'}
         Typeform(source, OPTIONS)
-        self.assertEqual(source['destination'],
-            DESTINATION + DESTINATION_POSTFIX
-        )
+        self.assertEqual(source['destination'], DESTINATION)
 
     def test_results(self):
         form_name = 'Test Survey'
@@ -51,9 +49,9 @@ class TestTypeform(unittest.TestCase):
         self.assertEqual(results[1].get('foo'), 'bar')
         self.assertEqual(results[2].get('foo'), 'bar')
 
-        self.assertEqual(results[0].get('__table'), '_stats')
-        self.assertEqual(results[1].get('__table'), '_questions')
-        self.assertEqual(results[2].get('__table'), '_responses')
+        self.assertEqual(results[0].get('__table'), 'stats')
+        self.assertEqual(results[1].get('__table'), 'questions')
+        self.assertEqual(results[2].get('__table'), 'responses')
 
         # it should add the formid_idsuffix
         self.assertEqual(results[1].get('id'), 'abc_x')
