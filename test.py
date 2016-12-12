@@ -37,7 +37,7 @@ class TestTypeform(unittest.TestCase):
         }
 
         # mock the returned responses from the server
-        responses = [{'field_id': 'x', 'token': 'y', 'foo_choice': 'bar'}]
+        responses = [{'id': 1, 'field_id': 'x', 'token': 'y', 'foo': 'bar'}]
         form_result = generateFormResults(1, responses)
         urllib2.urlopen = MagicMock(return_value=form_result)
 
@@ -48,8 +48,8 @@ class TestTypeform(unittest.TestCase):
         # each of the records should hold the appropriate destination
         # name, while the first record is always the general statistics
         # and from then on it's questions and responses records
-        self.assertEqual(results[1].get('foo_choice'), 'bar')
-        self.assertEqual(results[2].get('foo_choice'), 'bar')
+        self.assertEqual(results[1].get('foo'), 'bar')
+        self.assertEqual(results[2].get('foo'), 'bar')
 
         self.assertEqual(results[0].get('__table'), '_stats')
         self.assertEqual(results[1].get('__table'), '_questions')
@@ -58,6 +58,9 @@ class TestTypeform(unittest.TestCase):
         # it should add the formid_idsuffix
         self.assertEqual(results[1].get('id'), 'abc_x')
         self.assertEqual(results[2].get('id'), 'abc_y')
+
+        # it should keep the original id, if exists
+        self.assertEqual(results[1].get('oid'), 1)
 
         # all the records should belong to the same form
         for record in results:

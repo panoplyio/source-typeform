@@ -90,7 +90,16 @@ class Typeform(panoply.DataSource):
             def x(item):
                 item['__table'] = dest
                 item['__form'] = form.get('name')
+
+                # we're saving the untouched original id as it comes
+                # back from the server
+                if 'id' in item:
+                    item['oid'] = item.get('id')
+
+                # inject a custom id that's assembled from the form
+                # id and a given unique attribute (e.g. token)
                 item['id'] = '%s_%s' % (form.get('value'), item.get(id_suffix))
+
                 return item
 
             return x
