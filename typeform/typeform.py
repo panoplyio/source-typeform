@@ -74,20 +74,39 @@ class Typeform(panoply.DataSource):
             form['offset'] += FETCH_LIMIT
 
 
-        # we only need the 'questions' and 'responses' results
-        # that returned from the server. On top of that, add the
-        # destination table name
+        # general results statistics records
+        stats = {
+            '__table': '_stats',
+            '__form': form.get('name'),
+            'total': stats.get('total'),
+            'completed': stats.get('completed'),
+            'id': form.get('value')
+        }
+        stats = [stats]
 
-        # add the questions records
-        dest = (form['name'] + '_questions').replace(' ', '_')
-        results = map(lambda x: dict(__table=dest, **x), body['questions'])
+        # helper method that assists us to add the destination table,
+        # form name and generated unique id for a given item.
+        def add_attrs(dest, id_suffix):
+            def x(item):
+                item['__table'] = dest
+                item['__form'] = form.get('name')
+                item['id'] = '%s_%s' % (form.get('value'), item.get(id_suffix))
+                return item
 
-        # add the responses (answers) records
-        dest = (form['name'] + '_responses').replace(' ', '_')
-        responses = map(lambda x: dict(__table=dest, **x), body['responses'])
+            return x
 
-        results.extend(responses)
-        return results
+        # questions records
+        questions = map(add_attrs('_questions', 'field_id'),
+            body.get('questions')
+        )
+
+        # responses (survey answers) records
+        responses = map(add_attrs('_responses', 'token'),
+            body.get('responses')
+        )
+
+        stats.extend(questions + responses)
+        return stats
 
 
     # GET all the forms.
