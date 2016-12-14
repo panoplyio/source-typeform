@@ -70,7 +70,15 @@ class Typeform(panoply.DataSource):
             form['offset'] += FETCH_LIMIT
 
 
-        # general results statistics records
+        # When fetching data from the Typeform API, it provides us with
+        # the form questions, responses and general statistics. Instead
+        # of creating multiple tables for each form, We want to create
+        # a single set of tables for the aforementioned statistics.
+        # Note that each row is associated to it's form name,
+        # indicated by the '__form' column.
+
+        # generate a single result statistics record from
+        # the recent pulling
         stats = {
             '__table': 'stats',
             '__form': form.get('name'),
@@ -78,7 +86,6 @@ class Typeform(panoply.DataSource):
             'completed': stats.get('completed'),
             'id': form.get('value')
         }
-        stats = [stats]
 
         # helper method that assists us to add the destination table,
         # form name and generated unique id for a given item.
@@ -110,8 +117,8 @@ class Typeform(panoply.DataSource):
             body.get('responses', [])
         )
 
-        stats.extend(questions + responses)
-        return stats
+        # return all the different types of records in one batch
+        return [stats] + questions + responses
 
 
     # GET all the forms.
