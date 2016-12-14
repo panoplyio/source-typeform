@@ -102,12 +102,12 @@ class Typeform(panoply.DataSource):
 
         # questions records
         questions = map(add_attrs('questions', 'field_id'),
-            body.get('questions')
+            body.get('questions', [])
         )
 
         # responses (survey answers) records
         responses = map(add_attrs('responses', 'token'),
-            body.get('responses')
+            body.get('responses', [])
         )
 
         stats.extend(questions + responses)
