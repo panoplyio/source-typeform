@@ -7,8 +7,7 @@ import datetime
 
 
 FETCH_LIMIT = 500
-DESTINATION = 'typeform'
-DESTINATION_POSTFIX = '_{__table}'
+DESTINATION = 'typeform_{__table}'
 BASE_URL = 'https://api.typeform.com/v1'
 DATE_PARSER_FORMAT = '%Y-%m-%dT%H:%M:%S'
 
@@ -21,9 +20,6 @@ class Typeform(panoply.DataSource):
 
         if 'destination' not in source:
             source['destination'] = DESTINATION
-
-        # append the destination postfix, which represent the form name
-        source['destination'] += DESTINATION_POSTFIX
 
         # since we're retrieving only completed surveys we can
         # allow incremental pulling from the last successful batch
@@ -74,20 +70,55 @@ class Typeform(panoply.DataSource):
             form['offset'] += FETCH_LIMIT
 
 
-        # we only need the 'questions' and 'responses' results
-        # that returned from the server. On top of that, add the
-        # destination table name
+        # When fetching data from the Typeform API, it provides us with
+        # the form questions, responses and general statistics. Instead
+        # of creating multiple tables for each form, We want to create
+        # a single set of tables for the aforementioned statistics.
+        # Note that each row is associated to it's form name,
+        # indicated by the '__form' column.
 
-        # add the questions records
-        dest = (form['name'] + '_questions').replace(' ', '_')
-        results = map(lambda x: dict(__table=dest, **x), body['questions'])
+        # generate a single result statistics record from
+        # the recent pulling
+        stats = {
+            '__table': 'stats',
+            '__form': form.get('name'),
+            'total': stats.get('total'),
+            'completed': stats.get('completed'),
+            'id': form.get('value')
+        }
 
-        # add the responses (answers) records
-        dest = (form['name'] + '_responses').replace(' ', '_')
-        responses = map(lambda x: dict(__table=dest, **x), body['responses'])
+        # helper method that assists us to add the destination table,
+        # form name and generated unique id for a given item.
+        def add_attrs(dest, id_suffix):
+            def x(item):
+                item['__table'] = dest
+                item['__form'] = form.get('name')
 
-        results.extend(responses)
-        return results
+                # we're saving the untouched original id as it comes
+                # back from the server
+                if 'id' in item:
+                    item['oid'] = item.get('id')
+
+                # inject a custom id that's assembled from the form
+                # id and a given unique attribute (e.g. token)
+                item['id'] = '%s_%s' % (form.get('value'), item.get(id_suffix))
+
+                return item
+
+            return x
+
+        # questions records
+        questions = map(add_attrs('questions', 'field_id'),
+            body.get('questions', [])
+        )
+
+        # responses (survey answers) records
+        responses = map(add_attrs('responses', 'token'),
+            body.get('responses', [])
+        )
+
+        # return all the different types of records in one batch
+        return [stats] + questions + responses
 
 
     # GET all the forms.
@@ -99,7 +130,8 @@ class Typeform(panoply.DataSource):
         )
 
         # the body of the result is a list of forms
-        return self._request(url)
+        forms = self._request(url)
+        return map(lambda f: dict(name=f.get('name'), value=f.get('id')), forms)
 
     # Helper function for issuing GET requests 
     def _request(self, url):
@@ -119,7 +151,7 @@ class Typeform(panoply.DataSource):
     def _url(self, form):
         url = '%s/form/%s?key=%s&completed=true&offset=%s&limit=%s' % (
             BASE_URL,
-            form['id'],
+            form['value'],
             self._key,
             form['offset'],
             FETCH_LIMIT

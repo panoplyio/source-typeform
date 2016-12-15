@@ -25,40 +25,50 @@ class TestTypeform(unittest.TestCase):
     def test_destination(self):
         source = {'key': 'TypeformAPIKey'}
         Typeform(source, OPTIONS)
-        self.assertEqual(source['destination'],
-            DESTINATION + DESTINATION_POSTFIX
-        )
+        self.assertEqual(source['destination'], DESTINATION)
 
     def test_results(self):
+        form_name = 'Test Survey'
         source = {
             'key': 'TypefromAPIKey',
-            'forms': [{'id': 'abc', 'name': 'Test Survey'}]
+            'forms': [{'value': 'abc', 'name': form_name}]
         }
 
         # mock the returned responses from the server
-        responses = [{'id': 0, 'foo_choice': 'bar'}]
+        responses = [{'id': 1, 'field_id': 'x', 'token': 'y', 'foo': 'bar'}]
         form_result = generateFormResults(1, responses)
         urllib2.urlopen = MagicMock(return_value=form_result)
 
         stream = Typeform(source, OPTIONS)
 
         results = stream.read()
-        self.assertEqual(results[0].get('foo_choice'), 'bar')
-        self.assertEqual(results[1].get('foo_choice'), 'bar')
 
-        # it should have the destination table name attribute
-        # as the form's name joined with the type ('question'/'answer')
-        expected = 'Test_Survey_questions'
-        self.assertEqual(results[0].get('__table'), expected)
+        # each of the records should hold the appropriate destination
+        # name, while the first record is always the general statistics
+        # and from then on it's questions and responses records
+        self.assertEqual(results[1].get('foo'), 'bar')
+        self.assertEqual(results[2].get('foo'), 'bar')
 
-        expected = 'Test_Survey_responses'
-        self.assertEqual(results[1].get('__table'), expected)
+        self.assertEqual(results[0].get('__table'), 'stats')
+        self.assertEqual(results[1].get('__table'), 'questions')
+        self.assertEqual(results[2].get('__table'), 'responses')
+
+        # it should add the formid_idsuffix
+        self.assertEqual(results[1].get('id'), 'abc_x')
+        self.assertEqual(results[2].get('id'), 'abc_y')
+
+        # it should keep the original id, if exists
+        self.assertEqual(results[1].get('oid'), 1)
+
+        # all the records should belong to the same form
+        for record in results:
+            self.assertEqual(record.get('__form'), form_name)
 
     def test_incremental(self):
         source = {
             'key': 'TypeformAPIKey',
             'lastTimeSucceed': '2016-09-21T10:23:42.819Z',
-            'forms': [{'id': 'abc', 'name': 'Test Survey'}]
+            'forms': [{'value': 'abc', 'name': 'Test Survey'}]
         }
 
         res = generateFormResults(1)
@@ -73,7 +83,7 @@ class TestTypeform(unittest.TestCase):
         # we're pulling data after a specific date
         url = '%s/form/%s?key=%s&completed=true&offset=0&limit=%s&since=%s' % (
             BASE_URL,
-            source['forms'][0].get('id'),
+            source['forms'][0].get('value'),
             source['key'],
             FETCH_LIMIT,
             time
@@ -83,7 +93,7 @@ class TestTypeform(unittest.TestCase):
     def test_pagination(self):
         source = {
             'key': 'TypeformAPIKey',
-            'forms': [{'id': 'abc', 'name': 'Test Survey'}]
+            'forms': [{'value': 'abc', 'name': 'Test Survey'}]
         }
 
         limit = typeform.FETCH_LIMIT = 1
@@ -101,7 +111,7 @@ class TestTypeform(unittest.TestCase):
         # test that it constructed the correct url
         url = '%s/form/%s?key=%s&completed=true&offset=1&limit=%s' % (
             BASE_URL,
-            source['forms'][0].get('id'),
+            source['forms'][0].get('value'),
             source['key'],
             limit
         )
@@ -111,8 +121,8 @@ class TestTypeform(unittest.TestCase):
         source = {
             'key': 'TypefromAPIKey',
             'forms': [
-                {'id': 'abc', 'name': 'Test Survey'},
-                {'id': 'edf', 'name': 'Test Survey'}
+                {'value': 'abc', 'name': 'Test Survey'},
+                {'value': 'edf', 'name': 'Test Survey'}
             ]
         }
 
@@ -130,7 +140,7 @@ class TestTypeform(unittest.TestCase):
     def test_http_error_msg(self):
         source = {
             'key': 'TypefromAPIKey',
-            'forms': [{'id': 'someid', 'name': 'Test Survey'}]
+            'forms': [{'value': 'someid', 'name': 'Test Survey'}]
         }
 
         err_msg = 'please provide a valid API key'
@@ -152,7 +162,7 @@ class TestTypeform(unittest.TestCase):
     def test_http_error_status(self):
         source = {
             'key': 'TypeformAPIKey',
-            'forms': [{'id': 'someid', 'name': 'Test Survey'}]
+            'forms': [{'value': 'someid', 'name': 'Test Survey'}]
         }
 
         # mock the HTTPError that should be returned from the server
