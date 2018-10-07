@@ -16,7 +16,7 @@ setup(
     ],
     extras_require={
         "test": [
-            "pycodestyle==2.4.0",
+            "pep8==1.7.0",
             "coverage==4.3.4",
             "mock==2.0.0"
         ]
