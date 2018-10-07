@@ -1,8 +1,4 @@
-import json
 import unittest
-import urllib2
-
-from io import BytesIO
 from mock import MagicMock
 from typeform import *
 
@@ -11,189 +7,212 @@ OPTIONS = {
     'logger': lambda *args: None
 }
 
+HEADERS = {'authorization': 'Bearer someToken'}
+
+
+class MockResponse:
+    def __init__(self, json_data, status_code):
+        self.json_data = json_data
+        self.status_code = status_code
+        self.headers = {}
+
+    def __iter__(self):
+        return iter(self.json_data)
+
+    def json(self):
+        return self.json_data
+
+    def url(self):
+        return ''
+
+    def raise_for_status(self):
+        if self.status_code > 400:
+            raise requests.exceptions.RequestException
+
+
 class TestTypeform(unittest.TestCase):
-
-    def setUp(self):
-        self.original_urlopen = urllib2.urlopen
-        self.original_fetch_limit = typeform.FETCH_LIMIT
-
-    # clean up mocks after each test
-    def tearDown(self):
-        urllib2.urlopen = self.original_urlopen
-        typeform.FETCH_LIMIT = self.original_fetch_limit
 
     def test_destination(self):
         source = {'key': 'TypeformAPIKey'}
         Typeform(source, OPTIONS)
-        self.assertEqual(source['destination'], DESTINATION)
+        dest = '{}_{}'.format(DESTINATION, DESTINATION_POSTFIX)
+        self.assertEqual(source['destination'],dest)
 
     def test_results(self):
         form_name = 'Test Survey'
         source = {
-            'key': 'TypefromAPIKey',
+            'access_token': 'TypefromToken',
             'forms': [{'value': 'abc', 'name': form_name}]
         }
 
         # mock the returned responses from the server
-        responses = [{'id': 1, 'field_id': 'x', 'token': 'y', 'foo': 'bar'}]
-        form_result = generateFormResults(1, responses)
-        urllib2.urlopen = MagicMock(return_value=form_result)
+        res = generate_form_results(1)
+        requests.get = MagicMock(return_value=MockResponse(res, 200))
 
         stream = Typeform(source, OPTIONS)
 
         results = stream.read()
 
-        # each of the records should hold the appropriate destination
-        # name, while the first record is always the general statistics
-        # and from then on it's questions and responses records
-        self.assertEqual(results[1].get('foo'), 'bar')
-        self.assertEqual(results[2].get('foo'), 'bar')
+        expected = [{
+            '__completed': True,
+            '__table': form_name,
+            'answers': [
+                {
+                    'field_type': 'short_text',
+                    'text': 'some_answer1',
+                    'field_id': 'quetion1_id',
+                    '__parent_id': 0,
+                    'type': 'text',
+                    'id': '0-quetion1_id'
+                },
+                {
+                    'field_type': 'multiple_choice',
+                    '__parent_id': 0,
+                    'field_id': 'quetion2_id',
+                    'choice_label': 'Agree',
+                    'type': 'choice',
+                    'id': '0-quetion2_id'
+                }
+            ],
+            'token': 0,
+            'id': 0,
+            'metadata': {'someData': 'data'}
+        }]
 
-        self.assertEqual(results[0].get('__table'), 'stats')
-        self.assertEqual(results[1].get('__table'), 'questions')
-        self.assertEqual(results[2].get('__table'), 'responses')
-
-        # it should add the formid_idsuffix
-        self.assertEqual(results[1].get('id'), 'abc_x')
-        self.assertEqual(results[2].get('id'), 'abc_y')
-
-        # it should keep the original id, if exists
-        self.assertEqual(results[1].get('oid'), 1)
-
-        # all the records should belong to the same form
-        for record in results:
-            self.assertEqual(record.get('__form'), form_name)
+        self.assertEqual(results, expected)
 
     def test_incremental(self):
         source = {
-            'key': 'TypeformAPIKey',
+            'access_token': 'someToken',
             'lastTimeSucceed': '2016-09-21T10:23:42.819Z',
             'forms': [{'value': 'abc', 'name': 'Test Survey'}]
         }
 
-        res = generateFormResults(1)
-        urllib2.urlopen = MagicMock(return_value=res)
+        results = generate_form_results(1)
+        requests.get = MagicMock(return_value=MockResponse(results, 200))
 
         stream = Typeform(source, OPTIONS)
         stream.read()
 
-        time = source.get('lastTimeSucceed')
-        time = typeform.getTimestamp(time)
         # the focus here is on the 'since' query param that indicates
         # we're pulling data after a specific date
-        url = '%s/form/%s?key=%s&completed=true&offset=0&limit=%s&since=%s' % (
+        url = '{}/forms/{}/responses'.format(
             BASE_URL,
-            source['forms'][0].get('value'),
-            source['key'],
-            FETCH_LIMIT,
-            time
+            source['forms'][0].get('value')
         )
-        urllib2.urlopen.assert_called_with(url)
+        expected_params = {'since': '2016-09-20T21:23:42', 'page_size': 1000}
+        requests.get.assert_called_with(
+            url,
+            headers=HEADERS,
+            params=expected_params
+        )
 
     def test_pagination(self):
         source = {
-            'key': 'TypeformAPIKey',
+            'access_token': 'someToken',
             'forms': [{'value': 'abc', 'name': 'Test Survey'}]
         }
 
-        limit = typeform.FETCH_LIMIT = 1
-        res1, res2 = generateFormResults(1, None, 2), generateFormResults(1)
-        urllib2.urlopen = MagicMock(side_effect=[res1, res2])
+        res1, res2 = generate_form_results(2), generate_form_results(0)
+        requests.get = MagicMock(side_effect=[
+            MockResponse(res1, 200),
+            MockResponse(res2, 200)
+        ])
 
         stream = Typeform(source, OPTIONS)
-        stream.read() # 1st page
-        stream.read() # 2nd page
-        self.assertIsNone(stream.read()) # we're done
+        stream.read()  # 1st page
+        stream.read()  # 2nd page
+        self.assertIsNone(stream.read())  # we're done
 
         # it should make 2 requests.
-        self.assertEqual(urllib2.urlopen.call_count, 2)
+        self.assertEqual(requests.get.call_count, 2)
 
         # test that it constructed the correct url
-        url = '%s/form/%s?key=%s&completed=true&offset=1&limit=%s' % (
+        url = '{}/forms/{}/responses'.format(
             BASE_URL,
-            source['forms'][0].get('value'),
-            source['key'],
-            limit
+            source['forms'][0].get('value')
         )
-        urllib2.urlopen.assert_called_with(url)
+        expected_params = {'page_size': 1000, 'after': 1}
+        requests.get.assert_called_with(
+            url,
+            headers=HEADERS,
+            params=expected_params
+        )
 
     def test_iterate_forms(self):
         source = {
-            'key': 'TypefromAPIKey',
+            'access_token': 'TypefromToken',
             'forms': [
                 {'value': 'abc', 'name': 'Test Survey'},
                 {'value': 'edf', 'name': 'Test Survey'}
             ]
         }
 
-        res1, res2 = generateFormResults(1), generateFormResults(1)
-        urllib2.urlopen = MagicMock(side_effect=[res1, res2])
+        res1 = res3 = generate_form_results(1)
+        res2 = res4 = generate_form_results(0)
+        requests.get = MagicMock(side_effect=[
+            MockResponse(res1, 200),
+            MockResponse(res2, 200),
+            MockResponse(res3, 200),
+            MockResponse(res4, 200),
+        ])
 
         stream = Typeform(source, OPTIONS)
-        stream.read()
-        stream.read()
-        self.assertEqual(urllib2.urlopen.call_count, 2)
+        d = stream.read()
+        while d is not None:
+            d = stream.read()
+        self.assertEqual(requests.get.call_count, 4)
 
-        # we're done, it should return None
-        self.assertTrue(stream.read() is None)
+    def test_read_with_errors(self):
 
-    def test_http_error_msg(self):
+        response = MockResponse([], 500)
+        requests.get = MagicMock(return_value=response)
+
         source = {
             'key': 'TypefromAPIKey',
             'forms': [{'value': 'someid', 'name': 'Test Survey'}]
         }
-
-        err_msg = 'please provide a valid API key'
-        body = BytesIO(json.dumps({
-            'message': err_msg,
-            'status': 403
-        }))
-
-        # mock the HTTPError that should be return from the server
-        err = urllib2.HTTPError('url', 403, 'Forbidden', {}, body)
-        urllib2.urlopen = MagicMock(side_effect=err)
-
         stream = Typeform(source, OPTIONS)
-        try:
-            stream.read()
-        except TypeformError, e:
-            self.assertEqual(str(e), err_msg)
 
-    def test_http_error_status(self):
-        source = {
-            'key': 'TypeformAPIKey',
-            'forms': [{'value': 'someid', 'name': 'Test Survey'}]
-        }
+        self.assertRaises(requests.exceptions.RequestException, stream.read)
+        self.assertEqual(requests.get.call_count, 5)
 
-        # mock the HTTPError that should be returned from the server
-        code = 403
-        body = BytesIO(json.dumps({'status': code}))
-        err = urllib2.HTTPError('url', code, 'Forbidden', {}, body)
-        urllib2.urlopen = MagicMock(side_effect=err)
 
-        stream = Typeform(source, OPTIONS)
-        try:
-            stream.read()
-        except TypeformError, e:
-            self.assertEqual(str(e), 'HTTP StatusCode ' + str(code))
-
-def generateFormResults(size, responses = None, total = None):
-    indexes = range(0, size)
-
-    # generate objects if no responses are given.
-    if not responses:
-        responses = [{'id': x} for x in indexes]
-
-    results = [responses[x] for x in indexes]
-    return BytesIO(json.dumps({
-        'stats': {
-            'responses': {
-                'completed': total or size
-            }
+def generate_form_results(size):
+    responses = [{
+        'token': x,
+        'metadata': {
+            "someData": "data",
         },
-        'questions': results,
-        'responses': results
-    }))
+        'answers': [
+            {
+                "field": {
+                    "id": "quetion1_id",
+                    "type": "short_text",
+                },
+                "type": "text",
+                "text": "some_answer1"
+            },
+            {
+                "field": {
+                    "id": "quetion2_id",
+                    "type": "multiple_choice",
+                },
+                'type': 'choice',
+                'choice': {
+                    "label": 'Agree'
+                }
+            }
+        ]
+    }
+        for x in range(0, size)
+    ]
+
+    return {
+        'total_items': size,
+        'page_count': size,
+        'items': responses,
+    }
 
 
 if __name__ == '__main__':
