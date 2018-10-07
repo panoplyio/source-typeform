@@ -3,6 +3,7 @@ import panoply
 import requests
 import backoff
 import datetime
+from ratelimit import limits, sleep_and_retry
 
 
 BATCH_SIZE = 1000
@@ -11,6 +12,8 @@ DESTINATION_POSTFIX = '{__table}'
 BASE_URL = 'https://api.typeform.com'
 FORM_RESPONSES_URL = BASE_URL + '/forms/{value}/responses'
 DATE_PARSER_FORMAT = '%Y-%m-%dT%H:%M:%S'
+NUM_OF_CALLS = 2
+SECOND = 1
 
 
 def _log_backoff(details):
@@ -82,12 +85,16 @@ class Typeform(panoply.DataSource):
         # the body of the result is a list of forms
         response = self._request(url)
         forms = response.get('items', [])
-        return map(lambda f: dict(name=f.get('title'), value=f.get('id')), forms)
+        return map(lambda f: dict(name=f.get('title'),
+                                  value=f.get('id')), forms)
 
+    # Typeform limits API requests to NUM_OF_CALLS per SECOND.
     @backoff.on_exception(backoff.expo,
                           requests.exceptions.RequestException,
                           max_tries=5,
                           on_backoff=_log_backoff)
+    @sleep_and_retry
+    @limits(calls=NUM_OF_CALLS, period=SECOND)
     def _request(self, url, params=None):
         """ Helper function for issuing GET requests """
         self.log('Send Typefrom request', url, params)
@@ -130,16 +137,16 @@ def prepare_results(form, results):
             for key, value in answer.iteritems():
                 '''
                 Flatten the answers data, for example:
-                
+
                 'field': {
                     'id': 'some_id',
-                    'type': "some_type"
+                    'type': 'some_type'
                 }
-                
+
                 turns to:
-                
+
                 'field_id': 'some_id',
-                'field_type': "some_type"
+                'field_type': 'some_type'
                 '''
                 if isinstance(value, dict):
                     for k, v in value.iteritems():
@@ -175,7 +182,7 @@ def get_incval(source):
     if not source.get('lastTimeSucceed'):
         return None
 
-    time = source.get('lastTimeSucceed').split(".")[0]
+    time = source.get('lastTimeSucceed').split('.')[0]
     # convert the str to a datetime
     time = datetime.datetime.strptime(time, DATE_PARSER_FORMAT)
     # reduce 13 hours from the lastTimeSucceed

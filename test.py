@@ -36,7 +36,7 @@ class TestTypeform(unittest.TestCase):
         source = {'key': 'TypeformAPIKey'}
         Typeform(source, OPTIONS)
         dest = '{}_{}'.format(DESTINATION, DESTINATION_POSTFIX)
-        self.assertEqual(source['destination'],dest)
+        self.assertEqual(source['destination'], dest)
 
     def test_results(self):
         form_name = 'Test Survey'

@@ -12,6 +12,7 @@ setup(
         "panoply-python-sdk==1.5.0",
         "requests==2.3.0",
         "backoff==1.4.3",
+        "ratelimit==2.2.0"
     ],
     extras_require={
         "test": [
