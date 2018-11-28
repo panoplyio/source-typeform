@@ -40,10 +40,10 @@ class Typeform(panoply.DataSource):
         forms = source.get('forms', [])
         self._forms = copy.deepcopy(forms)
 
-        # add an 'after' attribute used
+        # add an 'before' attribute used
         # for pagination for each different form
         for form in self._forms:
-            form['after'] = None
+            form['before'] = None
 
         self._access_token = source.get('access_token')
         self._total = len(self._forms)
@@ -67,7 +67,7 @@ class Typeform(panoply.DataSource):
             self._forms.pop(0)
         else:
             # prepare the offset to the next set of records
-            form['after'] = items[-1].get('token')
+            form['before'] = items[-1].get('token')
 
         # report progress
         loaded = self._total - len(self._forms)
@@ -112,14 +112,16 @@ class Typeform(panoply.DataSource):
         page_size = batch_size if batch_size else BATCH_SIZE
         params = {
             'page_size': page_size,
+            'sort': 'landed_at,desc',
+            'completed': 1,
         }
 
         # pull data incrementally if configured to do so.
         if self._incval:
             params['since'] = self._incval
 
-        if form['after']:
-            params['after'] = form['after']
+        if form['before']:
+            params['before'] = form['before']
 
         return params
 
