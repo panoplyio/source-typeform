@@ -1,10 +1,10 @@
-import copy
-import panoply
-import requests
-import backoff
-import datetime
+from copy import deepcopy
+from panoply import DataSource
+from backoff import on_exception, expo
+from datetime import datetime, timedelta
 from ratelimit import limits, sleep_and_retry
-
+from requests.exceptions import RequestException
+import requests
 
 BATCH_SIZE = 1000
 DESTINATION = 'typeform'
@@ -13,24 +13,23 @@ BASE_URL = 'https://api.typeform.com'
 FORM_RESPONSES_URL = BASE_URL + '/forms/{value}/responses'
 DATE_PARSER_FORMAT = '%Y-%m-%dT%H:%M:%S'
 NUM_OF_CALLS = 2
-SECOND = 1
+LIMIT_PERIOD_SEC = 1
 
 
 def _log_backoff(details):
     """ Log each time a backoff happened """
+    print (
+        'Backing off {wait:0.1f} seconds afters {tries} tries '
+        'calling function {target} with args {args} and kwargs '
+        '{kwargs}'.format(**details)
+    )
 
-    print ('Backing off {wait:0.1f} seconds afters {tries} tries '
-           'calling function {target} with args {args} and kwargs '
-           '{kwargs}'.format(**details))
 
-
-class Typeform(panoply.DataSource):
-
-    # constructor
+class Typeform(DataSource):
     def __init__(self, source, options):
         super(Typeform, self).__init__(source, options)
 
-        source['destination'] = source.get('destination') or DESTINATION
+        source['destination'] = source.get('destination', DESTINATION)
         # append the destination postfix
         if DESTINATION_POSTFIX not in source['destination']:
             source['destination'] += '_{}'.format(DESTINATION_POSTFIX)
@@ -38,7 +37,7 @@ class Typeform(panoply.DataSource):
         self._incval = get_incval(source)
 
         forms = source.get('forms', [])
-        self._forms = copy.deepcopy(forms)
+        self._forms = deepcopy(forms)
 
         # add an 'before' attribute used
         # for pagination for each different form
@@ -61,10 +60,15 @@ class Typeform(panoply.DataSource):
         response = self._request(url, params)
 
         items = response.get('items', [])
-        if not items:
+
+        if len(items) < BATCH_SIZE:
             # we're done paginating with the current form.
             # no more results for this form, remove it
             self._forms.pop(0)
+
+            if not items:
+                # then move to the next form, if it exists.
+                return self.read(n)
         else:
             # prepare the offset to the next set of records
             form['before'] = items[-1].get('token')
@@ -75,6 +79,7 @@ class Typeform(panoply.DataSource):
         self.progress(loaded, self._total, msg)
 
         results = prepare_results(form, response)
+
         return results
 
     def get_forms(self):
@@ -85,16 +90,14 @@ class Typeform(panoply.DataSource):
         # the body of the result is a list of forms
         response = self._request(url)
         forms = response.get('items', [])
+
         return map(lambda f: dict(name=f.get('title'),
                                   value=f.get('id')), forms)
 
-    # Typeform limits API requests to NUM_OF_CALLS per SECOND.
-    @backoff.on_exception(backoff.expo,
-                          requests.exceptions.RequestException,
-                          max_tries=5,
-                          on_backoff=_log_backoff)
+    # Typeform limits API requests to NUM_OF_CALLS per LIMIT_PERIOD_SEC.
+    @on_exception(expo, RequestException, max_tries=5, on_backoff=_log_backoff)
     @sleep_and_retry
-    @limits(calls=NUM_OF_CALLS, period=SECOND)
+    @limits(calls=NUM_OF_CALLS, period=LIMIT_PERIOD_SEC)
     def _request(self, url, params=None):
         """ Helper function for issuing GET requests """
         self.log('Send Typefrom request', url, params)
@@ -113,7 +116,7 @@ class Typeform(panoply.DataSource):
         params = {
             'page_size': page_size,
             'sort': 'landed_at,desc',
-            'completed': 1,
+            'completed': 1,  # remove the line if you want to include both
         }
 
         # pull data incrementally if configured to do so.
@@ -132,12 +135,12 @@ def prepare_results(form, results):
     for item in items:
         item_id = item['token']
         _answers = []
-        answers = item.get('answers', [])
+        answers = item.get('answers') or []  # if None, then []
 
         for answer in answers:
             new_answer = {}
             for key, value in answer.iteritems():
-                '''
+                """
                 Flatten the answers data, for example:
 
                 'field': {
@@ -149,7 +152,7 @@ def prepare_results(form, results):
 
                 'field_id': 'some_id',
                 'field_type': 'some_type'
-                '''
+                """
                 if isinstance(value, dict):
                     for k, v in value.iteritems():
                         new_key = '{}_{}'.format(key, k)
@@ -186,9 +189,9 @@ def get_incval(source):
 
     time = source.get('lastTimeSucceed').split('.')[0]
     # convert the str to a datetime
-    time = datetime.datetime.strptime(time, DATE_PARSER_FORMAT)
+    time = datetime.strptime(time, DATE_PARSER_FORMAT)
     # reduce 13 hours from the lastTimeSucceed
     # to support all the different time zones
-    new_time = time - datetime.timedelta(hours=13)
+    new_time = time - timedelta(hours=13)
     # convert the datetime back to str and return it
-    return datetime.datetime.strftime(new_time, DATE_PARSER_FORMAT)
+    return datetime.strftime(new_time, DATE_PARSER_FORMAT)
