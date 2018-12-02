@@ -13,4 +13,4 @@ install:
 script:
     - coverage run --source=. test.py
     - coverage report -m
-    - pep8 --format=pylint --count .
+    - pycodestyle --format=pylint --count .

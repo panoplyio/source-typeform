@@ -30,6 +30,17 @@ class MockResponse:
             raise requests.exceptions.RequestException
 
 
+class TestMockResponse(unittest.TestCase):
+    def test_iter(self):
+        obj = {}
+        mock = MockResponse(obj, 0)
+        self.assertIsInstance(mock.__iter__(), type(obj.iterkeys()))
+
+    def test_url(self):
+        mock = MockResponse({}, 0)
+        self.assertEqual(mock.url(), '')
+
+
 class TestTypeform(unittest.TestCase):
 
     def test_destination(self):
@@ -81,6 +92,32 @@ class TestTypeform(unittest.TestCase):
 
         self.assertEqual(results, expected)
 
+    def test_results_not_completed(self):
+        form_name = 'Test Survey'
+        source = {
+            'access_token': 'TypefromToken',
+            'forms': [{'value': 'abc', 'name': form_name}]
+        }
+
+        # mock the returned responses from the server
+        res = generate_form_results_not_completed(1)
+        requests.get = MagicMock(return_value=MockResponse(res, 200))
+
+        stream = Typeform(source, OPTIONS)
+
+        results = stream.read()
+
+        expected = [{
+            '__completed': False,
+            '__table': form_name,
+            'answers': [],
+            'token': 0,
+            'id': 0,
+            'metadata': {'someData': 'data'}
+        }]
+
+        self.assertEqual(results, expected)
+
     def test_incremental(self):
         source = {
             'access_token': 'someToken',
@@ -100,7 +137,12 @@ class TestTypeform(unittest.TestCase):
             BASE_URL,
             source['forms'][0].get('value')
         )
-        expected_params = {'since': '2016-09-20T21:23:42', 'page_size': 1000}
+        expected_params = {
+            'sort': 'landed_at,desc',
+            'completed': 1,
+            'since': '2016-09-20T21:23:42',
+            'page_size': 1000
+        }
         requests.get.assert_called_with(
             url,
             headers=HEADERS,
@@ -113,7 +155,7 @@ class TestTypeform(unittest.TestCase):
             'forms': [{'value': 'abc', 'name': 'Test Survey'}]
         }
 
-        res1, res2 = generate_form_results(2), generate_form_results(0)
+        res1, res2 = generate_form_results(1000), generate_form_results(0)
         requests.get = MagicMock(side_effect=[
             MockResponse(res1, 200),
             MockResponse(res2, 200)
@@ -124,7 +166,7 @@ class TestTypeform(unittest.TestCase):
         stream.read()  # 2nd page
         self.assertIsNone(stream.read())  # we're done
 
-        # it should make 2 requests.
+        # it should make 1 requests.
         self.assertEqual(requests.get.call_count, 2)
 
         # test that it constructed the correct url
@@ -132,7 +174,12 @@ class TestTypeform(unittest.TestCase):
             BASE_URL,
             source['forms'][0].get('value')
         )
-        expected_params = {'page_size': 1000, 'after': 1}
+        expected_params = {
+            'sort': 'landed_at,desc',
+            'completed': 1,
+            'page_size': 1000,
+            'before': 999
+        }
         requests.get.assert_called_with(
             url,
             headers=HEADERS,
@@ -161,7 +208,7 @@ class TestTypeform(unittest.TestCase):
         d = stream.read()
         while d is not None:
             d = stream.read()
-        self.assertEqual(requests.get.call_count, 4)
+        self.assertEqual(requests.get.call_count, 2)
 
     def test_read_with_errors(self):
 
@@ -176,6 +223,19 @@ class TestTypeform(unittest.TestCase):
 
         self.assertRaises(requests.exceptions.RequestException, stream.read)
         self.assertEqual(requests.get.call_count, 5)
+
+    def test_get_forms(self):
+        forms = [{'id': 1, 'title': 'Form #1'}]
+        response = MockResponse({'items': forms}, 200)
+        requests.get = MagicMock(return_value=response)
+        source = {
+            'key': 'TypefromAPIKey',
+            'forms': [{'value': 'someid', 'name': 'Test Survey'}]
+        }
+        stream = Typeform(source, OPTIONS)
+        expected = map(lambda f: dict(name=f.get('title'),
+                                      value=f.get('id')), forms)
+        self.assertEqual(stream.get_forms(), expected)
 
 
 def generate_form_results(size):
@@ -204,6 +264,24 @@ def generate_form_results(size):
                 }
             }
         ]
+    }
+        for x in range(0, size)
+    ]
+
+    return {
+        'total_items': size,
+        'page_count': size,
+        'items': responses,
+    }
+
+
+def generate_form_results_not_completed(size):
+    responses = [{
+        'token': x,
+        'metadata': {
+            "someData": "data",
+        },
+        'answers': None
     }
         for x in range(0, size)
     ]
