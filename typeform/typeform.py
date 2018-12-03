@@ -1,205 +1,197 @@
-import time
-import copy
-import json
-import panoply
-import urllib2
-import datetime
+from copy import deepcopy
+from panoply import DataSource
+from backoff import on_exception, expo
+from datetime import datetime, timedelta
+from ratelimit import limits, sleep_and_retry
+from requests.exceptions import RequestException
+import requests
 
-
-FETCH_LIMIT = 500
-DESTINATION = 'typeform_{__table}'
-BASE_URL = 'https://api.typeform.com/v1'
+BATCH_SIZE = 1000
+DESTINATION = 'typeform'
+DESTINATION_POSTFIX = '{__table}'
+BASE_URL = 'https://api.typeform.com'
+FORM_RESPONSES_URL = BASE_URL + '/forms/{value}/responses'
 DATE_PARSER_FORMAT = '%Y-%m-%dT%H:%M:%S'
+NUM_OF_CALLS = 2
+LIMIT_PERIOD_SEC = 1
 
 
-class Typeform(panoply.DataSource):
+def _log_backoff(details):
+    """ Log each time a backoff happened """
+    print (
+        'Backing off {wait:0.1f} seconds afters {tries} tries '
+        'calling function {target} with args {args} and kwargs '
+        '{kwargs}'.format(**details)
+    )
 
-    # constructor
+
+class Typeform(DataSource):
     def __init__(self, source, options):
         super(Typeform, self).__init__(source, options)
 
-        if 'destination' not in source:
-            source['destination'] = DESTINATION
+        source['destination'] = source.get('destination', DESTINATION)
+        # append the destination postfix
+        if DESTINATION_POSTFIX not in source['destination']:
+            source['destination'] += '_{}'.format(DESTINATION_POSTFIX)
 
-        # since we're retrieving only completed surveys we can
-        # allow incremental pulling from the last successful batch
-        incval = source.get('lastTimeSucceed')
-        self._incval = getTimestamp(incval)
-
+        self._incval = get_incval(source)
 
         forms = source.get('forms', [])
-        self._forms = copy.deepcopy(forms)
+        self._forms = deepcopy(forms)
 
-        # add an 'offset' attribute used for pagination for each
-        # different form, used as the actual number to use as offset
-        for f in self._forms:
-            f['offset'] = 0
+        # add an 'before' attribute used
+        # for pagination for each different form
+        for form in self._forms:
+            form['before'] = None
 
-        self._key = source.get('key')
+        self._access_token = source.get('access_token')
         self._total = len(self._forms)
 
-    def read(self, n = None):
-        if len(self._forms) == 0:
+    def read(self, n=None):
+        if not self._forms:
             # no more data to consume
             return None
 
         form = self._forms[0]
 
         # construct the GET url and make the request
-        url = self._url(form)
-        body = self._request(url)
+        params = self._build_params(form, n)
+        url = FORM_RESPONSES_URL.format(**form)
+        response = self._request(url, params)
 
-        # 'completed' represent the number of completed forms that
-        # returned from the server
-        stats = body.get('stats', {}).get('responses', {})
-        total = stats.get('completed', 0)
+        items = response.get('items', [])
 
-        if (form['offset'] + FETCH_LIMIT) >= total:
+        if len(items) < BATCH_SIZE:
             # we're done paginating with the current form.
-            form['offset'] = None
-
             # no more results for this form, remove it
             self._forms.pop(0)
 
-            # report progress
-            loaded = self._total - len(self._forms)
-            msg = '%s of %s forms fetched' % (loaded, self._total)
-            self.progress(loaded, self._total, msg)
+            if not items:
+                # then move to the next form, if it exists.
+                return self.read(n)
         else:
             # prepare the offset to the next set of records
-            form['offset'] += FETCH_LIMIT
+            form['before'] = items[-1].get('token')
 
+        # report progress
+        loaded = self._total - len(self._forms)
+        msg = '%s of %s forms fetched' % (loaded, self._total)
+        self.progress(loaded, self._total, msg)
 
-        # When fetching data from the Typeform API, it provides us with
-        # the form questions, responses and general statistics. Instead
-        # of creating multiple tables for each form, We want to create
-        # a single set of tables for the aforementioned statistics.
-        # Note that each row is associated to it's form name,
-        # indicated by the '__form' column.
+        results = prepare_results(form, response)
 
-        # generate a single result statistics record from
-        # the recent pulling
-        stats = {
-            '__table': 'stats',
-            '__form': form.get('name'),
-            'total': stats.get('total'),
-            'completed': stats.get('completed'),
-            'id': form.get('value')
-        }
+        return results
 
-        # helper method that assists us to add the destination table,
-        # form name and generated unique id for a given item.
-        def add_attrs(dest, id_suffix):
-            def x(item):
-                item['__table'] = dest
-                item['__form'] = form.get('name')
-
-                # we're saving the untouched original id as it comes
-                # back from the server
-                if 'id' in item:
-                    item['oid'] = item.get('id')
-
-                # inject a custom id that's assembled from the form
-                # id and a given unique attribute (e.g. token)
-                item['id'] = '%s_%s' % (form.get('value'), item.get(id_suffix))
-
-                return item
-
-            return x
-
-        # questions records
-        questions = map(add_attrs('questions', 'field_id'),
-            body.get('questions', [])
-        )
-
-        # responses (survey answers) records
-        responses = map(add_attrs('responses', 'token'),
-            body.get('responses', [])
-        )
-
-        # return all the different types of records in one batch
-        return [stats] + questions + responses
-
-
-    # GET all the forms.
     def get_forms(self):
-        # provides us with all of the user forms
-        url = '%s/forms?key=%s' % (
-            BASE_URL,
-            self._key
-        )
+        """ GET all the user's forms """
+        self.log('Get forms')
+        url = BASE_URL + '/forms'
 
         # the body of the result is a list of forms
-        forms = self._request(url)
-        return map(lambda f: dict(name=f.get('name'), value=f.get('id')), forms)
+        response = self._request(url)
+        forms = response.get('items', [])
 
-    # Helper function for issuing GET requests 
-    def _request(self, url):
-        self.log('GET', url)
+        return map(lambda f: dict(name=f.get('title'),
+                                  value=f.get('id')), forms)
 
-        try:
-            res = urllib2.urlopen(url)
-        except urllib2.HTTPError, e:
-            raise TypeformError.from_http_error(e)
+    # Typeform limits API requests to NUM_OF_CALLS per LIMIT_PERIOD_SEC.
+    @on_exception(expo, RequestException, max_tries=5, on_backoff=_log_backoff)
+    @sleep_and_retry
+    @limits(calls=NUM_OF_CALLS, period=LIMIT_PERIOD_SEC)
+    def _request(self, url, params=None):
+        """ Helper function for issuing GET requests """
+        self.log('Send Typefrom request', url, params)
+        headers = {
+            'authorization': 'Bearer {}'.format(self._access_token)
+        }
+        response = requests.get(url, headers=headers, params=params)
+        response.raise_for_status()
 
+        self.log('Received Typefrom response', response.url)
+        return response.json()
 
-        # read the result and return it's parsed value
-        body = res.read()
-        return json.loads(body)
-
-    # construct the relevant url according to the Typeform API
-    def _url(self, form):
-        url = '%s/form/%s?key=%s&completed=true&offset=%s&limit=%s' % (
-            BASE_URL,
-            form['value'],
-            self._key,
-            form['offset'],
-            FETCH_LIMIT
-        )
+    def _build_params(self, form, batch_size):
+        """ construct the relevant params according to the Typeform API """
+        page_size = batch_size if batch_size else BATCH_SIZE
+        params = {
+            'page_size': page_size,
+            'sort': 'landed_at,desc',
+            'completed': 1,  # remove the line if you want to include both
+        }
 
         # pull data incrementally if configured to do so.
         if self._incval:
-            url += '&since=%s' % (self._incval)
+            params['since'] = self._incval
 
-        return url
+        if form['before']:
+            params['before'] = form['before']
+
+        return params
 
 
-# Typeform API exception class
-class TypeformError(Exception):
+def prepare_results(form, results):
+    """ Add metadata and flatten the results """
+    items = results.get('items', [])
+    for item in items:
+        item_id = item['token']
+        _answers = []
+        answers = item.get('answers') or []  # if None, then []
 
-    @classmethod
-    def from_http_error(cls, err):
-        """
-        Provide a more descriptive error message from the returned
-        Typeform API result, which should generally return a human
-        readable error message adjacent to the HTTP StatusCode.
-        """
-        try:
-            body = err.read()
-            parsed = json.loads(body)
-            if 'message' in parsed:
-                return cls(parsed['message'])
-            elif 'status' in parsed:
-                msg = 'HTTP StatusCode %s' % (parsed['status'])
-                return cls(msg)
-        except:
-            # unable to read a structured error message nor status hint,
-            # just return the original error
-            pass
+        for answer in answers:
+            new_answer = {}
+            for key, value in answer.iteritems():
+                """
+                Flatten the answers data, for example:
 
-        # no descriptive error message was extracted, return the
-        # original generic error
-        return err
+                'field': {
+                    'id': 'some_id',
+                    'type': 'some_type'
+                }
 
-# Helper function to validate a date and return the Unix timestamp
-def getTimestamp(value):
-    try:
-        # this is kind of ugly, but we need to convert a date string
-        # (e.g. '2016-09-21T10:23:42.819Z') to Unix timestamp
-        value = value.split('.')[0]
-        dt = datetime.datetime.strptime(value, DATE_PARSER_FORMAT)
-        return int(time.mktime(dt.timetuple()))
-    except:
-        # if we can't parse the date to a timestamp (so it could
-        # be used in the url GET request), don't use it at all.
+                turns to:
+
+                'field_id': 'some_id',
+                'field_type': 'some_type'
+                """
+                if isinstance(value, dict):
+                    for k, v in value.iteritems():
+                        new_key = '{}_{}'.format(key, k)
+                        new_answer[new_key] = v
+                        if k == 'id':
+                            id_val = '{}-{}'.format(item_id, v)
+                            new_answer['id'] = id_val
+                            new_answer['__parent_id'] = item_id
+
+                else:
+                    new_answer[key] = value
+            _answers.append(new_answer)
+
+        add_item_data(form, item, _answers)
+    return items
+
+
+def add_item_data(form, item, answers):
+    """ Add the flatten data and metadata to each item """
+    # 'completed' represent the number of completed forms that
+    # returned from the server
+    item['__completed'] = True
+    if not answers:
+        item['__completed'] = False
+    item['answers'] = answers
+    item['id'] = item['token']
+    item['__table'] = form['name']
+
+
+def get_incval(source):
+    """ create incval using lastTimeSucceed if exists """
+    if not source.get('lastTimeSucceed'):
         return None
+
+    time = source.get('lastTimeSucceed').split('.')[0]
+    # convert the str to a datetime
+    time = datetime.strptime(time, DATE_PARSER_FORMAT)
+    # reduce 13 hours from the lastTimeSucceed
+    # to support all the different time zones
+    new_time = time - timedelta(hours=13)
+    # convert the datetime back to str and return it
+    return datetime.strftime(new_time, DATE_PARSER_FORMAT)
