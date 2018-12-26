@@ -8,6 +8,12 @@ import requests
 
 BATCH_SIZE = 1000
 DESTINATION = 'typeform'
+FORM_TYPES = {
+    'completed': { 'completed': 1 },
+    'not_completed': { 'completed': 0 },
+    'all': {},
+}
+DEFAULT_FORM_TYPE = 'completed'
 DESTINATION_POSTFIX = '{__table}'
 BASE_URL = 'https://api.typeform.com'
 FORM_RESPONSES_URL = BASE_URL + '/forms/{value}/responses'
@@ -30,6 +36,7 @@ class Typeform(DataSource):
         super(Typeform, self).__init__(source, options)
 
         source['destination'] = source.get('destination', DESTINATION)
+        source['__formTypes'] = source.get('__formTypes', DEFAULT_FORM_TYPE)
         # append the destination postfix
         if DESTINATION_POSTFIX not in source['destination']:
             source['destination'] += '_{}'.format(DESTINATION_POSTFIX)
@@ -113,11 +120,14 @@ class Typeform(DataSource):
     def _build_params(self, form, batch_size):
         """ construct the relevant params according to the Typeform API """
         page_size = batch_size if batch_size else BATCH_SIZE
+        completed = FORM_TYPES[self.source.get('__formTypes')]
         params = {
             'page_size': page_size,
             'sort': 'landed_at,desc',
-            'completed': 1,  # remove the line if you want to include both
+            # 'completed': 1,  # remove the line if you want to include both
         }
+
+        params.update(completed)
 
         # pull data incrementally if configured to do so.
         if self._incval:
