@@ -237,6 +237,94 @@ class TestTypeform(unittest.TestCase):
                                       value=f.get('id')), forms)
         self.assertEqual(stream.get_forms(), expected)
 
+    def test_form_type(self):
+        source = {
+            'access_token': 'someToken',
+            'forms': [{'value': 'abc', 'name': 'Test Survey'}],
+            '__formTypes': 'all'
+        }
+
+        res1 = generate_form_results_completed_and_not(10)
+        requests.get = MagicMock(side_effect=[ MockResponse(res1, 200) ])
+
+        stream = Typeform(source, OPTIONS)
+        stream.read()
+
+        url = '{}/forms/{}/responses'.format(
+            BASE_URL,
+            source['forms'][0].get('value')
+        )
+
+        expected_params = {
+            'sort': 'landed_at,desc',
+            'page_size': 1000
+        }
+
+        requests.get.assert_called_with(
+            url,
+            headers=HEADERS,
+            params=expected_params
+        )
+
+    def test_default_form_type(self):
+        source = {
+            'access_token': 'someToken',
+            'forms': [{'value': 'abc', 'name': 'Test Survey'}]
+        }
+
+        res1 = generate_form_results_completed_and_not(10)
+        requests.get = MagicMock(side_effect=[ MockResponse(res1, 200) ])
+
+        stream = Typeform(source, OPTIONS)
+        stream.read()
+
+        url = '{}/forms/{}/responses'.format(
+            BASE_URL,
+            source['forms'][0].get('value')
+        )
+
+        expected_params = {
+            'sort': 'landed_at,desc',
+            'page_size': 1000,
+            'completed': 1
+        }
+
+        requests.get.assert_called_with(
+            url,
+            headers=HEADERS,
+            params=expected_params
+        )
+
+    def test_not_completed_form_type(self):
+        source = {
+            'access_token': 'someToken',
+            'forms': [{'value': 'abc', 'name': 'Test Survey'}],
+            '__formTypes': 'not_completed'
+        }
+
+        res1 = generate_form_results_completed_and_not(10)
+        requests.get = MagicMock(side_effect=[ MockResponse(res1, 200) ])
+
+        stream = Typeform(source, OPTIONS)
+        stream.read()
+
+        url = '{}/forms/{}/responses'.format(
+            BASE_URL,
+            source['forms'][0].get('value')
+        )
+
+        expected_params = {
+            'sort': 'landed_at,desc',
+            'page_size': 1000,
+            'completed': 0
+        }
+
+        requests.get.assert_called_with(
+            url,
+            headers=HEADERS,
+            params=expected_params
+        )
+
 
 def generate_form_results(size):
     responses = [{
@@ -281,10 +369,58 @@ def generate_form_results_not_completed(size):
         'metadata': {
             "someData": "data",
         },
-        'answers': None
+        'answers': []
     }
         for x in range(0, size)
     ]
+
+    return {
+        'total_items': size,
+        'page_count': size,
+        'items': responses,
+    }
+
+def generate_form_results_completed_and_not(size):
+    not_completed_responses = [{
+        'token': x,
+        'metadata': {
+            "someData": "data",
+        },
+        'answers': []
+    }
+        for x in range(0, size)
+    ]
+
+    completed_responses = [{
+        'token': x,
+        'metadata': {
+            "someData": "data",
+        },
+        'answers': [
+            {
+                "field": {
+                    "id": "quetion1_id",
+                    "type": "short_text",
+                },
+                "type": "text",
+                "text": "some_answer1"
+            },
+            {
+                "field": {
+                    "id": "quetion2_id",
+                    "type": "multiple_choice",
+                },
+                'type': 'choice',
+                'choice': {
+                    "label": 'Agree'
+                }
+            }
+        ]
+    }
+        for x in range(0, size)
+    ]
+
+    responses = not_completed_responses + completed_responses
 
     return {
         'total_items': size,
