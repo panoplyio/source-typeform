@@ -9,8 +9,8 @@ import requests
 BATCH_SIZE = 1000
 DESTINATION = 'typeform'
 FORM_TYPES = {
-    'completed': { 'completed': 1 },
-    'not_completed': { 'completed': 0 },
+    'completed': {'completed': 1},
+    'not_completed': {'completed': 0},
     'all': {},
 }
 DEFAULT_FORM_TYPE = 'completed'

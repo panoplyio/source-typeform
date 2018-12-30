@@ -245,7 +245,7 @@ class TestTypeform(unittest.TestCase):
         }
 
         res1 = generate_form_results_completed_and_not(10)
-        requests.get = MagicMock(side_effect=[ MockResponse(res1, 200) ])
+        requests.get = MagicMock(side_effect=[MockResponse(res1, 200)])
 
         stream = Typeform(source, OPTIONS)
         stream.read()
@@ -273,7 +273,7 @@ class TestTypeform(unittest.TestCase):
         }
 
         res1 = generate_form_results_completed_and_not(10)
-        requests.get = MagicMock(side_effect=[ MockResponse(res1, 200) ])
+        requests.get = MagicMock(side_effect=[MockResponse(res1, 200)])
 
         stream = Typeform(source, OPTIONS)
         stream.read()
@@ -303,7 +303,7 @@ class TestTypeform(unittest.TestCase):
         }
 
         res1 = generate_form_results_completed_and_not(10)
-        requests.get = MagicMock(side_effect=[ MockResponse(res1, 200) ])
+        requests.get = MagicMock(side_effect=[MockResponse(res1, 200)])
 
         stream = Typeform(source, OPTIONS)
         stream.read()
@@ -379,6 +379,7 @@ def generate_form_results_not_completed(size):
         'page_count': size,
         'items': responses,
     }
+
 
 def generate_form_results_completed_and_not(size):
     not_completed_responses = [{
