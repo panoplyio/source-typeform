@@ -124,7 +124,6 @@ class Typeform(DataSource):
         params = {
             'page_size': page_size,
             'sort': 'landed_at,desc',
-            # 'completed': 1,  # remove the line if you want to include both
         }
 
         params.update(completed)
